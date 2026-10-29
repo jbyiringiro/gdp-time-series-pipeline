@@ -1,0 +1,6 @@
+{
+  "country": "United States",
+  "target": "GDP",
+  "lag": 1,
+  "moving_average_window": 5
+}

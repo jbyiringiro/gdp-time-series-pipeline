@@ -1,0 +1,8 @@
+{
+  "feature_order": [
+    "Population",
+    "GDP_Lag1",
+    "GDP_5Year_MA",
+    "Final_consumption_expenditure"
+  ]
+}

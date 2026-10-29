@@ -1,0 +1,21 @@
+{
+  "model": "LinearRegression",
+  "trained_on_years": [
+    1975,
+    2011
+  ],
+  "test_years": [
+    2012,
+    2021
+  ],
+  "test_metrics": {
+    "rmse_usd_billion": 889.13,
+    "mape_pct": 4.17,
+    "r2": 0.824
+  },
+  "naive_baseline_test_metrics": {
+    "rmse_usd_billion": 967.99,
+    "mape_pct": 4.18,
+    "r2": 0.791
+  }
+}
