@@ -1,5 +1,6 @@
 {
   "model": "LinearRegression",
+  "selected_by": "lowest time-ordered validation RMSE on the training years (Task 1 notebook, Part C)",
   "trained_on_years": [
     1975,
     2011
@@ -17,5 +18,11 @@
     "rmse_usd_billion": 967.99,
     "mape_pct": 4.18,
     "r2": 0.791
+  },
+  "versions": {
+    "python": "3.13.9",
+    "scikit-learn": "1.7.2",
+    "pandas": "2.3.3",
+    "numpy": "2.3.5"
   }
 }

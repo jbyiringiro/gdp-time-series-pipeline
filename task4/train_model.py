@@ -2,8 +2,11 @@
 Trains the Task 1 model and saves it for the Task 4 prediction script.
 
 Follows Part C of the Task 1 notebook: United States only, the same
-preprocessing and features, a chronological 80/20 split and Linear Regression.
-The test results printed here should match the notebook's experiment table.
+preprocessing and features, a chronological 80/20 split and Linear Regression,
+the model and feature set chosen there by time-ordered validation on the
+training years. The test results printed here should match the notebook.
+The package versions used are saved with the model, because a model saved
+with one scikit-learn version may not load the same way in another.
 
 Usage:
     python task4/train_model.py                  # train on 1975-2011, as in Task 1
@@ -12,15 +15,17 @@ Usage:
 
 import argparse
 import json
+import platform
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, r2_score
 
-from preprocessing import FEATURES, MA_WINDOW, TARGET, add_features, clean_records
+from preprocessing import FEATURES, LAG, MA_WINDOW, TARGET, add_features, clean_records
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CSV_PATH = BASE_DIR / "data" / "Global Economy Indicators.csv"
@@ -98,15 +103,22 @@ def main():
     with open(ARTIFACTS_DIR / "feature_order.json", "w", encoding="utf-8") as feature_file:
         json.dump({"feature_order": FEATURES}, feature_file, indent=2)
     with open(ARTIFACTS_DIR / "preprocess_config.json", "w", encoding="utf-8") as config_file:
-        json.dump({"country": COUNTRY, "target": TARGET, "lag": 1, "moving_average_window": MA_WINDOW}, config_file, indent=2)
+        json.dump({"country": COUNTRY, "target": TARGET, "lag": LAG, "moving_average_window": MA_WINDOW}, config_file, indent=2)
     with open(ARTIFACTS_DIR / "training_summary.json", "w", encoding="utf-8") as summary_file:
         json.dump(
             {
                 "model": "LinearRegression",
+                "selected_by": "lowest time-ordered validation RMSE on the training years (Task 1 notebook, Part C)",
                 "trained_on_years": trained_on,
                 "test_years": [int(X_test.index.min()), int(X_test.index.max())],
                 "test_metrics": test_metrics,
                 "naive_baseline_test_metrics": baseline_metrics,
+                "versions": {
+                    "python": platform.python_version(),
+                    "scikit-learn": sklearn.__version__,
+                    "pandas": pd.__version__,
+                    "numpy": np.__version__,
+                },
             },
             summary_file,
             indent=2,
