@@ -19,6 +19,13 @@ Why this dataset and this country:
 
 The full report, covering all four tasks, is [report/Group13_Report.pdf](report/Group13_Report.pdf).
 
+## Team (Group 13)
+
+| Member | GitHub | Contribution |
+|--------|--------|--------------|
+| Josue Byiringiro | `jbyiringiro` | Task 1 (EDA, preprocessing, modelling) and Task 4 (prediction script); report and README |
+| Celine Shoga | `cshoga` | Task 2 (MySQL and MongoDB) and Task 3 (API and CRUD demonstration); report and README |
+
 ---
 
 ## Quick Start: run it on your PC
