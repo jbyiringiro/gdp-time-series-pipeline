@@ -83,3 +83,27 @@ curl -X DELETE http://localhost:8000/api/mongodb/records/64a1b2c3d4e5f6a7b8c9d0e
 ```
 
 All endpoints return JSON. Date values are formatted as `YYYY-MM-DD`.
+
+## Responses and Error Codes
+
+| Status | When |
+|--------|------|
+| `201` | `POST` created the record; the response contains its `id` |
+| `200` | The record was read, updated or deleted. `PUT` returns `"modified": 1` when values changed and `"modified": 0` when the record already had them |
+| `400` | `start_date` / `end_date` are not complete `YYYY-MM-DD` dates (e.g. `2015` or `2015-02-30`), `end_date` is before `start_date`, the body has no fields to update, or a MongoDB id is not valid |
+| `404` | The record id does not exist, or no records match the country or date range |
+| `409` | A record for that country and year already exists (MySQL: unique key on `country_id, year`; MongoDB: unique index on `country_name, year`) |
+| `503` | MySQL or MongoDB is not reachable |
+
+The existence of a record is checked before it is updated, so an update that changes nothing still returns `200`, and an update of a missing record returns `404`. When a MySQL record has no exchange-rate row for its year, updating its exchange rates creates that row.
+
+## CRUD Demonstration
+
+With the API running, `crud_demo.py` runs the complete sequence **POST → GET → PUT → GET → DELETE → GET** on both databases, then the error cases (unchanged update, nonexistent ids, invalid date ranges, duplicate record):
+
+```bash
+python task3/crud_demo.py                            # API_URL in .env, else http://localhost:8000
+python task3/crud_demo.py --api http://localhost:8001
+```
+
+Each step prints the request, the status code and the response, and checks the result (for example, that the id returned by `POST` is the id read back by `GET`). The test record is the United States in 2030, which is not in the dataset, and the sequence deletes it again. The output of the last run, with all 41 checks passed, is in [report/crud_demo_output.txt](../report/crud_demo_output.txt).
