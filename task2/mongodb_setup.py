@@ -100,7 +100,8 @@ collection.insert_many(documents)
 print(f"Inserted {len(documents)} documents.")
 
 # adding indexes so queries run faster
-collection.create_index([("country_name", 1), ("year", 1)])
+# (country_name, year) is unique: one record per country per year, so duplicates are rejected
+collection.create_index([("country_name", 1), ("year", 1)], unique=True)
 collection.create_index([("year", -1)])
 print("Indexes created.\n")
 
