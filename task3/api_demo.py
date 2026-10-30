@@ -13,16 +13,18 @@ databases created in Task 2.  Each database exposes:
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import mysql.connector
-import pandas as pd
 from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from mysql.connector import errorcode
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 # Settings come from the .env file in the project root (copy .env.example to .env)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -139,6 +141,34 @@ def _get_or_create_country(cursor, name: str, currency: str = ""):
     return new_id
 
 
+def _parse_date(value: str, name: str):
+    """Parse a complete YYYY-MM-DD date; '2015', '2015-6-1' or '2015-02-30' are rejected."""
+    try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            raise ValueError
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {name} '{value}'. Use a complete date in YYYY-MM-DD format",
+        )
+
+
+def _years_in_range(start_date: str, end_date: str):
+    """Validate both dates first, then convert them into the years stored in the databases."""
+    start = _parse_date(start_date, "start_date")
+    end = _parse_date(end_date, "end_date")
+    if end < start:
+        raise HTTPException(
+            status_code=400, detail="end_date must not be before start_date"
+        )
+    return start.year, end.year
+
+
+def _update_message(modified: int) -> str:
+    return "Record updated" if modified else "No changes: the record already has these values"
+
+
 # SQL query used by several GET endpoints
 _SQL_SELECT = """
     SELECT c.country_name  AS Country,
@@ -234,6 +264,8 @@ def sql_create_record(record: EconomicRecordCreate):
                 record.other_activities, record.mining_manufacturing_utilities,
             ),
         )
+        # save the new id now: the exchange-rate insert below changes lastrowid
+        record_id = cursor.lastrowid
 
         # insert exchange rates when provided
         if record.ama_exchange_rate is not None or record.imf_exchange_rate is not None:
@@ -253,12 +285,18 @@ def sql_create_record(record: EconomicRecordCreate):
         conn.commit()
         return {
             "message": "Record created",
-            "id": cursor.lastrowid,
+            "id": record_id,
             "country": record.country_name,
             "year": record.year,
         }
     except mysql.connector.Error as err:
         conn.rollback()
+        # economic_indicators has a unique key on (country_id, year)
+        if err.errno == errorcode.ER_DUP_ENTRY:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A record for {record.country_name} {record.year} already exists",
+            )
         raise HTTPException(status_code=400, detail=str(err))
     finally:
         cursor.close()
@@ -324,17 +362,7 @@ def sql_get_range(
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
 ):
     """Get records within a date range from MySQL."""
-    try:
-        start_year = pd.to_datetime(start_date).year
-        end_year = pd.to_datetime(end_date).year
-    except Exception:
-        raise HTTPException(
-            status_code=400, detail="Invalid date format. Use YYYY-MM-DD"
-        )
-    if end_year < start_year:
-        raise HTTPException(
-            status_code=400, detail="end_date must be after start_date"
-        )
+    start_year, end_year = _years_in_range(start_date, end_date)
 
     conn = _get_mysql()
     cursor = conn.cursor(dictionary=True)
@@ -368,69 +396,66 @@ def sql_get_range(
 @app.put("/api/sql/records/{record_id}")
 def sql_update_record(record_id: int, updates: EconomicRecordUpdate):
     """Update an existing economic record in MySQL."""
+    update_dict = updates.model_dump(exclude_none=True)
+    if not update_dict:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
     conn = _get_mysql()
     cursor = conn.cursor()
     try:
-        update_dict = updates.model_dump(exclude_none=True)
-        if not update_dict:
-            raise HTTPException(status_code=400, detail="No fields to update")
+        # Check that the record exists before updating it: MySQL reports 0 changed
+        # rows both for a missing id and for an update that changes nothing
+        cursor.execute(
+            "SELECT country_id, year FROM economic_indicators WHERE id = %s",
+            (record_id,),
+        )
+        ref = cursor.fetchone()
+        if not ref:
+            raise HTTPException(
+                status_code=404, detail=f"Record {record_id} not found"
+            )
+        country_id, year = ref
+        modified = 0
 
         # fields that live in economic_indicators
-        ei_map = {
-            "population": "population",
-            "per_capita_gni": "per_capita_gni",
-            "gdp": "gdp",
-            "gni_usd": "gni_usd",
-            "exports": "exports",
-            "imports": "imports",
-            "final_consumption_expenditure": "final_consumption_expenditure",
-            "government_consumption": "government_consumption",
-            "household_consumption": "household_consumption",
-            "gross_capital_formation": "gross_capital_formation",
-            "gross_fixed_capital_formation": "gross_fixed_capital_formation",
+        ei_fields = [
+            "population", "per_capita_gni", "gdp", "gni_usd", "exports", "imports",
+            "final_consumption_expenditure", "government_consumption",
+            "household_consumption", "gross_capital_formation",
+            "gross_fixed_capital_formation",
+        ]
+        ei_updates = {k: v for k, v in update_dict.items() if k in ei_fields}
+        if ei_updates:
+            ei_sets = ", ".join(f"{column} = %s" for column in ei_updates)
+            cursor.execute(
+                f"UPDATE economic_indicators SET {ei_sets} WHERE id = %s",
+                [*ei_updates.values(), record_id],
+            )
+            modified += cursor.rowcount
+
+        # fields that live in exchange_rates. The year may have no exchange-rate
+        # row yet, so insert one, or update only the given rates if it has
+        er_columns = {
+            "ama_exchange_rate": "ama_exchange_rate",
+            "imf_exchange_rate": "imf_based_exchange_rate",
         }
-        ei_sets = []
-        ei_vals = []
-        for key, val in update_dict.items():
-            if key in ei_map:
-                ei_sets.append(f"{ei_map[key]} = %s")
-                ei_vals.append(val)
-
-        if ei_sets:
-            ei_vals.append(record_id)
+        er_updates = {er_columns[k]: v for k, v in update_dict.items() if k in er_columns}
+        if er_updates:
+            columns = ", ".join(er_updates)
+            placeholders = ", ".join(["%s"] * len(er_updates))
+            er_sets = ", ".join(f"{column} = VALUES({column})" for column in er_updates)
             cursor.execute(
-                f"UPDATE economic_indicators SET {', '.join(ei_sets)} WHERE id = %s",
-                ei_vals,
+                f"INSERT INTO exchange_rates (country_id, year, {columns}) "
+                f"VALUES (%s, %s, {placeholders}) "
+                f"ON DUPLICATE KEY UPDATE {er_sets}",
+                [country_id, year, *er_updates.values()],
             )
-            if cursor.rowcount == 0:
-                raise HTTPException(
-                    status_code=404, detail=f"Record {record_id} not found"
-                )
-
-        # fields that live in exchange_rates
-        if "ama_exchange_rate" in update_dict or "imf_exchange_rate" in update_dict:
-            cursor.execute(
-                "SELECT country_id, year FROM economic_indicators WHERE id = %s",
-                (record_id,),
-            )
-            ref = cursor.fetchone()
-            if ref:
-                er_sets, er_vals = [], []
-                if "ama_exchange_rate" in update_dict:
-                    er_sets.append("ama_exchange_rate = %s")
-                    er_vals.append(update_dict["ama_exchange_rate"])
-                if "imf_exchange_rate" in update_dict:
-                    er_sets.append("imf_based_exchange_rate = %s")
-                    er_vals.append(update_dict["imf_exchange_rate"])
-                er_vals.extend([ref[0], ref[1]])
-                cursor.execute(
-                    f"UPDATE exchange_rates SET {', '.join(er_sets)} "
-                    "WHERE country_id = %s AND year = %s",
-                    er_vals,
-                )
+            # rowcount: 1 = row inserted, 2 = row updated, 0 = values unchanged
+            modified += cursor.rowcount
 
         conn.commit()
-        return {"message": "Record updated", "id": record_id}
+        modified = int(modified > 0)
+        return {"message": _update_message(modified), "id": record_id, "modified": modified}
     except mysql.connector.Error as err:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(err))
@@ -524,7 +549,24 @@ def mongo_create_record(record: EconomicRecordCreate):
             "total_value_added": record.total_value_added,
         },
     }
-    result = collection.insert_one(doc)
+    # One record per country and year. The unique index rejects exact duplicates;
+    # this check also catches the same country written in a different case
+    duplicate = collection.find_one({
+        "country_name": _mongo_country_regex(record.country_name),
+        "year": record.year,
+    })
+    if duplicate:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A record for {record.country_name} {record.year} already exists",
+        )
+    try:
+        result = collection.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A record for {record.country_name} {record.year} already exists",
+        )
     return {
         "message": "Record created",
         "id": str(result.inserted_id),
@@ -583,17 +625,7 @@ def mongo_get_range(
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
 ):
     """Get records within a date range from MongoDB."""
-    try:
-        start_year = pd.to_datetime(start_date).year
-        end_year = pd.to_datetime(end_date).year
-    except Exception:
-        raise HTTPException(
-            status_code=400, detail="Invalid date format. Use YYYY-MM-DD"
-        )
-    if end_year < start_year:
-        raise HTTPException(
-            status_code=400, detail="end_date must be after start_date"
-        )
+    start_year, end_year = _years_in_range(start_date, end_date)
 
     collection = _get_mongo()
     docs = list(
@@ -650,12 +682,13 @@ def mongo_update_record(record_id: str, updates: EconomicRecordUpdate):
     mongo_set = {field_map.get(k, k): v for k, v in update_dict.items()}
 
     result = collection.update_one({"_id": obj_id}, {"$set": mongo_set})
+    # matched_count says whether the record exists, modified_count whether anything changed
     if result.matched_count == 0:
         raise HTTPException(
             status_code=404, detail=f"Record {record_id} not found"
         )
     return {
-        "message": "Record updated",
+        "message": _update_message(result.modified_count),
         "id": record_id,
         "modified": result.modified_count,
     }
