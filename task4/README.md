@@ -30,7 +30,7 @@ The settings saved with the model in `artifacts/preprocess_config.json` are enfo
 | Lag feature | `GDP_Lag1` = GDP of the previous year | Same |
 | Moving average | `GDP_5Year_MA` = mean of the 5 previous years (`shift(1)` before `rolling(5)`) | Same, so the GDP being predicted never leaks into its own features |
 | Features | `Population`, `GDP_Lag1`, `GDP_5Year_MA`, `Final consumption expenditure` | Same four |
-| Model | Linear Regression with all four features, chosen by time-ordered validation on 1975–2011, tested once on 2012–2021 | Same; `train_model.py` reproduces the notebook's test results (RMSE US$889bn, MAPE 4.17%, R² 0.82) |
+| Model | Linear Regression with all four features, chosen by time-ordered validation on 1975–2011, then tested once on 2012–2021 in the revised procedure | Same; `train_model.py` reproduces the notebook's test results (RMSE US$889bn, MAPE 4.17%, R² 0.82) |
 
 ## Setup
 

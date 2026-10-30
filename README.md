@@ -4,7 +4,7 @@ A time-series pipeline built on the **Global Economy Indicators (1970–2021)** 
 
 ## Problem Definition
 
-Estimate the **annual GDP of the United States** (current US$) for year *t* from its GDP history up to year *t*−1 (last year's GDP and the average of the five previous years) plus same-year population and final consumption expenditure. The estimate is a nowcast made at the end of year *t*: by then, consumption is largely known from monthly and quarterly statistics and population from the December estimate, while the first official annual GDP figure only follows in late January. The model, its features and its hyperparameters are chosen by time-ordered validation on 1975–2011; the chosen model is then tested once on 2012–2021 (which includes the 2020 COVID-19 shock) and must beat the naive forecast "GDP this year = GDP last year".
+Estimate the **annual GDP of the United States** (current US$) for year *t* from its GDP history up to year *t*−1 (last year's GDP and the average of the five previous years) plus same-year population and final consumption expenditure. The estimate is a nowcast made at the end of year *t*: by then, consumption is largely known from monthly and quarterly statistics and population from the December estimate, while the first official annual GDP figure only follows in late January. The model, its features and its hyperparameters are chosen by time-ordered validation on 1975–2011; in this revised procedure, the chosen model is then tested once on 2012–2021 (which includes the 2020 COVID-19 shock; an earlier version of the analysis had already examined these years) and must beat the naive forecast "GDP this year = GDP last year".
 
 ## Dataset
 
@@ -73,7 +73,7 @@ cp .env.example .env       # macOS / Linux
 | 2. MySQL | `python task2/mysql_setup.py` | 3 tables created, 10,512 records loaded, 5 query results |
 | 2. MongoDB | `python task2/mongodb_setup.py` | 10,512 documents, 2 sample documents, 5 query results |
 | 3. API | `uvicorn task3.api_demo:app --port 8000` | API running; try it at http://localhost:8000/docs. **Leave it running** |
-| 3. CRUD demo | `python task3/crud_demo.py` (in a second terminal, venv activated) | POST → GET → PUT → GET → DELETE → GET on both databases plus the error cases: 41 of 41 checks passed, saved to `report/crud_demo_output.txt` |
+| 3. CRUD demo | `python task3/crud_demo.py` (in a second terminal, venv activated) | POST → GET → PUT → GET → DELETE → GET on both databases plus a one-year date range and the error cases: 45 of 45 checks passed, saved to `report/crud_demo_output.txt` |
 | 4. Model | `python task4/train_model.py` | Test RMSE US$889bn, MAPE 4.17%, R² 0.824 (same as the notebook) |
 | 4. Prediction | `python task4/predict_from_api.py` | The four steps, then the 2021 GDP estimate (model error −5.0%) |
 | 4. Prediction (SQL) | `python task4/predict_from_api.py --db sql` | The same result, read from MySQL |
@@ -130,7 +130,7 @@ cp .env.example .env       # macOS / Linux
 
 ## Task 1 — Exploratory Analysis and Modelling
 
-The notebook covers the dataset checks (time range, frequency, missing values, distributions, stationarity), lag and moving-average features, five analytical questions with figures, and the model experiments. Linear Regression, a tuned Decision Tree and a tuned Random Forest are each tried with five feature sets on three time-ordered validation folds inside 1975–2011, with the naive baseline as reference. The combination with the lowest validation RMSE (Linear Regression with all four features) is then evaluated once on the untouched test years 2012–2021. It reads `data/Global Economy Indicators.csv`, or downloads it from GitHub when that file is not there (e.g. in Colab). See Section 4 of [report/Group13_Report.pdf](report/Group13_Report.pdf) for the full write-up.
+The notebook covers the dataset checks (time range, frequency, missing values, distributions, stationarity), lag and moving-average features, five analytical questions with figures, and the model experiments. Linear Regression, a tuned Decision Tree and a tuned Random Forest are each tried with five feature sets on three time-ordered validation folds inside 1975–2011, with the naive baseline as reference. The combination with the lowest validation RMSE (Linear Regression with all four features) is then evaluated on the test years 2012–2021, which play no part in the selection. An earlier version of the analysis had already compared models on those years, so the test is not fully independent (see Section 4.8 of the report). It reads `data/Global Economy Indicators.csv`, or downloads it from GitHub when that file is not there (e.g. in Colab). See Section 4 of [report/Group13_Report.pdf](report/Group13_Report.pdf) for the full write-up.
 
 ## Task 2 — Database Design & Implementation
 
@@ -173,11 +173,11 @@ Single collection `economic_records` with embedded subdocuments, and a unique in
 | `POST` | `/records` | Create a record |
 | `GET` | `/records?country=...` | All records for a country |
 | `GET` | `/records/latest?country=...` | Latest record |
-| `GET` | `/records/range?country=...&start_date=...&end_date=...` | Records in a date range |
+| `GET` | `/records/range?country=...&start_date=...&end_date=...` | Records for every year that overlaps the date range |
 | `PUT` | `/records/{id}` | Update a record |
 | `DELETE` | `/records/{id}` | Delete a record |
 
-`python task3/crud_demo.py` demonstrates the full CRUD sequence on both databases, including updates that change nothing, nonexistent ids, invalid date ranges and duplicate records; its output is in [report/crud_demo_output.txt](report/crud_demo_output.txt). See [task3/README.md](task3/README.md) for example requests and the status codes.
+The records are annual: each covers a whole year and is dated 1 January, so the date-range endpoint returns every year that overlaps the range (2015-12-30 to 2015-12-31 returns the 2015 record). `python task3/crud_demo.py` demonstrates the full CRUD sequence on both databases, including updates that change nothing, nonexistent ids, invalid date ranges and duplicate records; its output is in [report/crud_demo_output.txt](report/crud_demo_output.txt). See [task3/README.md](task3/README.md) for example requests and the status codes.
 
 ## Task 4 — Prediction Script
 
