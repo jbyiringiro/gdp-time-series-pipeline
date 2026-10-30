@@ -4,7 +4,7 @@ A time-series pipeline built on the **Global Economy Indicators (1970–2021)** 
 
 ## Problem Definition
 
-Estimate the **annual GDP of the United States** (current US$) for year *t* from its GDP history up to year *t*−1 (last year's GDP and the average of the five previous years) plus same-year population and final consumption expenditure. The model is trained on 1975–2011, tested on 2012–2021 (which includes the 2020 COVID-19 shock), and must beat the naive forecast "GDP this year = GDP last year".
+Estimate the **annual GDP of the United States** (current US$) for year *t* from its GDP history up to year *t*−1 (last year's GDP and the average of the five previous years) plus same-year population and final consumption expenditure. The estimate is a nowcast made at the end of year *t*: by then, consumption is largely known from monthly and quarterly statistics and population from the December estimate, while the first official annual GDP figure only follows in late January. The model, its features and its hyperparameters are chosen by time-ordered validation on 1975–2011; the chosen model is then tested once on 2012–2021 (which includes the 2020 COVID-19 shock) and must beat the naive forecast "GDP this year = GDP last year".
 
 ## Dataset
 
@@ -24,6 +24,8 @@ The full report, covering all four tasks, is [report/Group13_Report.pdf](report/
 ## Quick Start: run it on your PC
 
 **You need:** Python 3.10 or newer, [MySQL Server 8](https://dev.mysql.com/downloads/mysql/) and [MongoDB Community Server 6+](https://www.mongodb.com/try/download/community), both installed and running.
+
+**Tested with:** Python 3.13.9, MySQL 8.4.8 and MongoDB 8.2.5, with the package versions noted in `requirements.txt`. scikit-learn is pinned to 1.7.2 because the saved model (`task4/artifacts/model.joblib`) was created with that version.
 
 Run every command from the project folder.
 
@@ -71,7 +73,8 @@ cp .env.example .env       # macOS / Linux
 | 2. MySQL | `python task2/mysql_setup.py` | 3 tables created, 10,512 records loaded, 5 query results |
 | 2. MongoDB | `python task2/mongodb_setup.py` | 10,512 documents, 2 sample documents, 5 query results |
 | 3. API | `uvicorn task3.api_demo:app --port 8000` | API running; try it at http://localhost:8000/docs. **Leave it running** |
-| 4. Model | `python task4/train_model.py` (in a second terminal, venv activated) | Test RMSE US$889bn, MAPE 4.17%, R² 0.824 (same as the notebook) |
+| 3. CRUD demo | `python task3/crud_demo.py` (in a second terminal, venv activated) | POST → GET → PUT → GET → DELETE → GET on both databases plus the error cases: 41 of 41 checks passed, saved to `report/crud_demo_output.txt` |
+| 4. Model | `python task4/train_model.py` | Test RMSE US$889bn, MAPE 4.17%, R² 0.824 (same as the notebook) |
 | 4. Prediction | `python task4/predict_from_api.py` | The four steps, then the 2021 GDP estimate (model error −5.0%) |
 | 4. Prediction (SQL) | `python task4/predict_from_api.py --db sql` | The same result, read from MySQL |
 
@@ -100,6 +103,7 @@ cp .env.example .env       # macOS / Linux
 ├── .env.example                       # Settings template: copy to .env and add your MySQL password
 ├── report/                            # Outputs
 │   ├── Group13_Report.pdf             #   Full report covering all four tasks
+│   ├── crud_demo_output.txt           #   Output of task3/crud_demo.py (CRUD on both databases)
 │   ├── figures/                       #   Task 1 figures, saved by the notebook when it runs
 │   └── screenshots/                   #   Databases, API and prediction script running
 ├── task2/                             # Task 2: Database design & implementation
@@ -109,6 +113,7 @@ cp .env.example .env       # macOS / Linux
 │   └── mongodb_setup.py               #   MongoDB: setup, load data, run queries
 ├── task3/                             # Task 3: API endpoints
 │   ├── api_demo.py                    #   FastAPI CRUD + latest + date-range endpoints for both databases
+│   ├── crud_demo.py                   #   Runs and checks the full CRUD sequence on both databases
 │   └── README.md                      #   Endpoint list and example requests
 ├── task4/                             # Task 4: End-to-end prediction script
 │   ├── predict_from_api.py            #   Fetch API data -> preprocess -> load model -> predict
@@ -119,13 +124,13 @@ cp .env.example .env       # macOS / Linux
 │       ├── model.joblib               #   Trained Linear Regression model
 │       ├── feature_order.json         #   Feature order expected by the model
 │       ├── preprocess_config.json     #   Country, target, lag and moving-average window
-│       └── training_summary.json      #   Training years and test metrics
+│       └── training_summary.json      #   Training years, test metrics and package versions
 └── README.md
 ```
 
 ## Task 1 — Exploratory Analysis and Modelling
 
-The notebook covers the dataset checks (time range, frequency, missing values, distributions, stationarity), lag and moving-average features, five analytical questions with figures, and four experiments (naive baseline, Linear Regression, tuned Decision Tree, tuned Random Forest). It reads `data/Global Economy Indicators.csv`, or downloads it from GitHub when that file is not there (e.g. in Colab). See Section 4 of [report/Group13_Report.pdf](report/Group13_Report.pdf) for the full write-up.
+The notebook covers the dataset checks (time range, frequency, missing values, distributions, stationarity), lag and moving-average features, five analytical questions with figures, and the model experiments. Linear Regression, a tuned Decision Tree and a tuned Random Forest are each tried with five feature sets on three time-ordered validation folds inside 1975–2011, with the naive baseline as reference. The combination with the lowest validation RMSE (Linear Regression with all four features) is then evaluated once on the untouched test years 2012–2021. It reads `data/Global Economy Indicators.csv`, or downloads it from GitHub when that file is not there (e.g. in Colab). See Section 4 of [report/Group13_Report.pdf](report/Group13_Report.pdf) for the full write-up.
 
 ## Task 2 — Database Design & Implementation
 
@@ -143,7 +148,7 @@ See `task2/erd_diagram.png` for the full ERD.
 
 ### MongoDB Collection Design
 
-Single collection `economic_records` with embedded subdocuments:
+Single collection `economic_records` with embedded subdocuments, and a unique index on (`country_name`, `year`) so a country cannot have two records for the same year:
 - `exchange_rates` — AMA and IMF rates
 - `demographics` — population, GNI per capita
 - `economic_indicators` — GDP, exports, imports, consumption, etc.
@@ -172,14 +177,14 @@ Single collection `economic_records` with embedded subdocuments:
 | `PUT` | `/records/{id}` | Update a record |
 | `DELETE` | `/records/{id}` | Delete a record |
 
-See [task3/README.md](task3/README.md) for example requests.
+`python task3/crud_demo.py` demonstrates the full CRUD sequence on both databases, including updates that change nothing, nonexistent ids, invalid date ranges and duplicate records; its output is in [report/crud_demo_output.txt](report/crud_demo_output.txt). See [task3/README.md](task3/README.md) for example requests and the status codes.
 
 ## Task 4 — Prediction Script
 
 `task4/predict_from_api.py`:
 
-1. Fetches a country's yearly records from the Task 3 API (MongoDB by default, `--db sql` for MySQL)
-2. Preprocesses them with the same pipeline as Task 1 (`task4/preprocessing.py`: interpolation, `GDP_Lag1`, `GDP_5Year_MA` built from previous years only)
+1. Fetches a country's yearly records from the Task 3 API (MongoDB by default, `--db sql` for MySQL). Only the country the model was trained on is accepted, as recorded in `task4/artifacts/preprocess_config.json`
+2. Preprocesses them with the same pipeline as Task 1 (`task4/preprocessing.py`: interpolation, `GDP_Lag1`, `GDP_5Year_MA` built from previous years only, with the window saved in `preprocess_config.json`). Records after the year being estimated, and that year's own GDP, are left out, so no missing value is filled from information that comes later
 3. Loads the trained model (`task4/artifacts/model.joblib`, saved by `task4/train_model.py`)
 4. Estimates GDP for the latest year and compares it with the actual value and the naive baseline
 
