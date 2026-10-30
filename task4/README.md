@@ -7,6 +7,8 @@
 3. **Loads** the trained model saved by `train_model.py`
 4. **Predicts** GDP for the latest year (or `--year`) and compares it with the actual value, when the API has one, and with the naive baseline "GDP this year = GDP last year"
 
+The settings saved with the model in `artifacts/preprocess_config.json` are enforced: the script only predicts for the country the model was trained on (the United States) and builds the features with the saved lag and moving-average window.
+
 ## Files
 
 | File | Purpose |
@@ -17,18 +19,18 @@
 | `artifacts/model.joblib` | Trained Linear Regression model |
 | `artifacts/feature_order.json` | Feature names in the order the model expects |
 | `artifacts/preprocess_config.json` | Country, target, lag and moving-average window |
-| `artifacts/training_summary.json` | Training years and test metrics |
+| `artifacts/training_summary.json` | Training years, test metrics and the Python, scikit-learn, pandas and numpy versions used |
 
 ## How it matches Task 1
 
 | Step | Task 1 notebook | Task 4 (`preprocessing.py`) |
 |------|-----------------|-----------------------------|
 | Frequency | One row per year | Missing years are added as rows, so `shift(1)` always means "previous year" |
-| Missing values | Linear interpolation, ffill/bfill at the edges | Same for `Population` and `Final_consumption_expenditure`; GDP is only interpolated *between* known years, so a year whose GDP is unknown stays empty and can be predicted |
+| Missing values | Linear interpolation, ffill/bfill at the edges | Same for `Population` and `Final_consumption_expenditure`; GDP is only interpolated *between* known years. For a prediction, the records are first cut at the year being estimated and that year's GDP is hidden, so no gap is ever filled from a later value |
 | Lag feature | `GDP_Lag1` = GDP of the previous year | Same |
 | Moving average | `GDP_5Year_MA` = mean of the 5 previous years (`shift(1)` before `rolling(5)`) | Same, so the GDP being predicted never leaks into its own features |
 | Features | `Population`, `GDP_Lag1`, `GDP_5Year_MA`, `Final consumption expenditure` | Same four |
-| Model | Linear Regression, trained 1975–2011, tested 2012–2021 | Same; `train_model.py` reproduces the notebook's test results (RMSE US$889bn, MAPE 4.17%, R² 0.82) |
+| Model | Linear Regression with all four features, chosen by time-ordered validation on 1975–2011, tested once on 2012–2021 | Same; `train_model.py` reproduces the notebook's test results (RMSE US$889bn, MAPE 4.17%, R² 0.82) |
 
 ## Setup
 
@@ -60,7 +62,7 @@ Example output (`--start_date 2010-01-01 --end_date 2021-12-31`):
 [1/4] Fetching records for United States from http://localhost:8000/api/mongodb/records/range
       12 records received
 [2/4] Preprocessing (same pipeline as Task 1: interpolation, GDP_Lag1, GDP_5Year_MA)
-      Years 2010-2021, one row per year
+      Years 2010-2021, one row per year (moving-average window 5 from preprocess_config.json)
 [3/4] Loading the trained model
       Features: ['Population', 'GDP_Lag1', 'GDP_5Year_MA', 'Final_consumption_expenditure']
 [4/4] Making the prediction
@@ -86,7 +88,7 @@ The errors (−5.0% for the model, −9.4% for the baseline) are the same as the
 |----------|---------|-------------|
 | `--db` | `mongodb` | `mongodb` or `sql`: which database's endpoints to use |
 | `--api` | `API_URL` in `.env`, else `http://localhost:8000` | Base URL of the Task 3 API |
-| `--country` | `United States` | Country to fetch |
+| `--country` | the country in `preprocess_config.json` (`United States`) | Country to fetch; any other country is refused unless `--artifacts_dir` points to a model trained for it |
 | `--start_date`, `--end_date` | none | `YYYY-MM-DD`, give both or neither; with them the script uses the `/range` endpoint, without them it fetches all records |
 | `--year` | latest year fetched | Year to estimate |
 | `--artifacts_dir` | `task4/artifacts` | Folder with the model and its config |
@@ -103,6 +105,9 @@ The script exits with a clear message (exit code 1) when:
 - only one of `--start_date` / `--end_date` is given;
 - fewer than 6 consecutive years are fetched (the 5-year moving average needs 5 previous years);
 - the requested `--year` is not in the fetched records;
-- the model has not been trained yet, or the model and `feature_order.json` come from different training runs.
+- the country is not the one the model was trained on (e.g. `--country France` with the US model);
+- the model has not been trained yet, or the model, `feature_order.json` and `preprocess_config.json` do not match each other or `preprocessing.py`.
 
-If the API has no population or consumption value for the year being estimated, the script fills it from neighbouring years (as in Task 1) and prints a warning.
+If the API has no population or consumption value for the year being estimated, the script fills it from earlier years and prints a warning. If GDP is missing for one of the five years before it, the script refuses to fill it from the year being estimated or any later year, and stops with the "Not enough history" message instead.
+
+If the installed scikit-learn version differs from the one saved in `training_summary.json` (1.7.2, pinned in `requirements.txt`), the script prints a warning before predicting.
