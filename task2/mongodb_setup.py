@@ -19,7 +19,7 @@ load_dotenv(BASE_DIR / '.env')
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 DB_NAME = os.getenv('MONGO_DB', 'global_economy_db')
 COLLECTION_NAME = 'economic_records'
-CSV_PATH = BASE_DIR / 'Global Economy Indicators.csv'
+CSV_PATH = BASE_DIR / 'data' / 'Global Economy Indicators.csv'
 
 
 # ---- connect and load data ----

@@ -19,7 +19,7 @@ DB_PORT = int(os.getenv('MYSQL_PORT', '3306'))
 DB_USER = os.getenv('MYSQL_USER', 'root')
 DB_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
 DB_NAME = os.getenv('MYSQL_DB', 'global_economy_db')
-CSV_PATH = BASE_DIR / 'Global Economy Indicators.csv'
+CSV_PATH = BASE_DIR / 'data' / 'Global Economy Indicators.csv'
 
 
 # ---- creating the database and tables ----

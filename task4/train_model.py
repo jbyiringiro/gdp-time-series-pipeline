@@ -23,7 +23,7 @@ from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, 
 from preprocessing import FEATURES, MA_WINDOW, TARGET, add_features, clean_records
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CSV_PATH = BASE_DIR / "Global Economy Indicators.csv"
+CSV_PATH = BASE_DIR / "data" / "Global Economy Indicators.csv"
 ARTIFACTS_DIR = BASE_DIR / "task4" / "artifacts"
 COUNTRY = "United States"
 TRAIN_SHARE = 0.8
