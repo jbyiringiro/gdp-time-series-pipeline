@@ -84,6 +84,10 @@ curl -X DELETE http://localhost:8000/api/mongodb/records/64a1b2c3d4e5f6a7b8c9d0e
 
 All endpoints return JSON. Date values are formatted as `YYYY-MM-DD`.
 
+## Date Ranges and Annual Records
+
+The data are annual: each record covers a whole calendar year and its `Date` is 1 January of that year. `/records/range` first checks that both dates are complete `YYYY-MM-DD` dates, then returns every year that overlaps the range. For example, `start_date=2015-12-30&end_date=2015-12-31` returns the 2015 record, shown with `"Date": "2015-01-01"`, because the range falls inside 2015; `start_date=2015-06-01&end_date=2016-05-31` returns 2015 and 2016.
+
 ## Responses and Error Codes
 
 | Status | When |
@@ -99,11 +103,11 @@ The existence of a record is checked before it is updated, so an update that cha
 
 ## CRUD Demonstration
 
-With the API running, `crud_demo.py` runs the complete sequence **POST → GET → PUT → GET → DELETE → GET** on both databases, then the error cases (unchanged update, nonexistent ids, invalid date ranges, duplicate record):
+With the API running, `crud_demo.py` runs the complete sequence **POST → GET → PUT → GET → DELETE → GET** on both databases, then a date range inside one year (the whole year is returned) and the error cases (unchanged update, nonexistent ids, invalid date ranges, duplicate record):
 
 ```bash
 python task3/crud_demo.py                            # API_URL in .env, else http://localhost:8000
 python task3/crud_demo.py --api http://localhost:8001
 ```
 
-Each step prints the request, the status code and the response, and checks the result (for example, that the id returned by `POST` is the id read back by `GET`). The test record is the United States in 2030, which is not in the dataset, and the sequence deletes it again. The output of the last run, with all 41 checks passed, is in [report/crud_demo_output.txt](../report/crud_demo_output.txt).
+Each step prints the request, the status code and the response, and checks the result (for example, that the id returned by `POST` is the id read back by `GET`). The test record is the United States in 2030, which is not in the dataset, and the sequence deletes it again. The output of the last run, with all 45 checks passed, is in [report/crud_demo_output.txt](../report/crud_demo_output.txt).

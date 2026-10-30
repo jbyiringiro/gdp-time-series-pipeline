@@ -1,4 +1,4 @@
-CRUD demonstration against http://127.0.0.1:8002
+CRUD demonstration against http://localhost:8001
 
 ======================================================================
 MySQL: POST -> GET -> PUT -> GET -> DELETE -> GET
@@ -7,40 +7,40 @@ MySQL: POST -> GET -> PUT -> GET -> DELETE -> GET
   POST /api/sql/records
   body: {"country_name": "United States", "currency": "US Dollar", "year": 2030, "population": 355000000, "gdp": 30000000000000, "final_consumption_expenditure": 24000000000000}
   -> 201 (expected 201)  PASS
-  {"message": "Record created", "id": 10515, "country": "United States", "year": 2030}
+  {"message": "Record created", "id": 10519, "country": "United States", "year": 2030}
 
 [MySQL 2] Read it back
   GET /api/sql/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
   -> 200 (expected 200)  PASS
-  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"Country": "United States", "Year": 2030, "Population": 355000000, "Per_capita_GNI": null, "GDP": 30000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": null, "IMF_exchange_rate": null, "record_id": 10515, "Date": "2030-01-01"}]}
-  check: the record read back has the id POST returned (10515)  PASS
+  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"Country": "United States", "Year": 2030, "Population": 355000000, "Per_capita_GNI": null, "GDP": 30000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": null, "IMF_exchange_rate": null, "record_id": 10519, "Date": "2030-01-01"}]}
+  check: the record read back has the id POST returned (10519)  PASS
   check: GDP is the value sent  PASS
 
 [MySQL 3] Update GDP and add exchange rates (the record has none yet)
-  PUT /api/sql/records/10515
+  PUT /api/sql/records/10519
   body: {"gdp": 31000000000000, "ama_exchange_rate": 1.0, "imf_exchange_rate": 1.0}
   -> 200 (expected 200)  PASS
-  {"message": "Record updated", "id": 10515, "modified": 1}
+  {"message": "Record updated", "id": 10519, "modified": 1}
   check: the response says 1 record was modified  PASS
 
 [MySQL 4] Read it again
   GET /api/sql/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
   -> 200 (expected 200)  PASS
-  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"Country": "United States", "Year": 2030, "Population": 355000000, "Per_capita_GNI": null, "GDP": 31000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0, "record_id": 10515, "Date": "2030-01-01"}]}
+  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"Country": "United States", "Year": 2030, "Population": 355000000, "Per_capita_GNI": null, "GDP": 31000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0, "record_id": 10519, "Date": "2030-01-01"}]}
   check: GDP has the new value  PASS
   check: the exchange rates were saved  PASS
 
 [MySQL 5] Send the same update again (changes nothing, the record still exists)
-  PUT /api/sql/records/10515
+  PUT /api/sql/records/10519
   body: {"gdp": 31000000000000, "ama_exchange_rate": 1.0, "imf_exchange_rate": 1.0}
   -> 200 (expected 200)  PASS
-  {"message": "No changes: the record already has these values", "id": 10515, "modified": 0}
+  {"message": "No changes: the record already has these values", "id": 10519, "modified": 0}
   check: the response says 0 records were modified  PASS
 
 [MySQL 6] Delete the record
-  DELETE /api/sql/records/10515
+  DELETE /api/sql/records/10519
   -> 200 (expected 200)  PASS
-  {"message": "Record deleted", "id": 10515}
+  {"message": "Record deleted", "id": 10519}
 
 [MySQL 7] Read it again: the record is gone
   GET /api/sql/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
@@ -48,8 +48,14 @@ MySQL: POST -> GET -> PUT -> GET -> DELETE -> GET
   {"detail": "No records in the specified date range"}
 
 ======================================================================
-MySQL: error cases
+MySQL: annual date range and error cases
 ======================================================================
+[MySQL A1] Range inside one year: records are annual, so that year's record is returned
+  GET /api/sql/records/range?country=United States&start_date=2015-12-30&end_date=2015-12-31
+  -> 200 (expected 200)  PASS
+  {"country": "United States", "start_date": "2015-12-30", "end_date": "2015-12-31", "count": 1, "data": [{"Country": "United States", "Year": 2015, "Population": 324607776, "Per_capita_GNI": 57488.0, "GDP": 18200000000000.0, "GNI_USD": 18700000000000.0, "Exports": 2270000000000.0, "Imports": 2790000000000.0, "Final_consumption_expenditure": 14900000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0, "record_id": 10139, "Date": "2015-01-01"}]}
+  check: one record, the whole year 2015 (dated 2015-01-01)  PASS
+
 [MySQL E1] Update a record that does not exist
   PUT /api/sql/records/999999
   body: {"gdp": 1.0}
@@ -95,40 +101,40 @@ MongoDB: POST -> GET -> PUT -> GET -> DELETE -> GET
   POST /api/mongodb/records
   body: {"country_name": "United States", "currency": "US Dollar", "year": 2030, "population": 355000000, "gdp": 30000000000000, "final_consumption_expenditure": 24000000000000}
   -> 201 (expected 201)  PASS
-  {"message": "Record created", "id": "6ae4b4b07c150f826f6ce5cc", "country": "United States", "year": 2030}
+  {"message": "Record created", "id": "6ae4bc33420fa07d48809428", "country": "United States", "year": 2030}
 
 [MongoDB 2] Read it back
   GET /api/mongodb/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
   -> 200 (expected 200)  PASS
-  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"id": "6ae4b4b07c150f826f6ce5cc", "Country": "United States", "Year": 2030, "Date": "2030-01-01", "Population": 355000000.0, "Per_capita_GNI": null, "GDP": 30000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": null, "IMF_exchange_rate": null}]}
-  check: the record read back has the id POST returned (6ae4b4b07c150f826f6ce5cc)  PASS
+  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"id": "6ae4bc33420fa07d48809428", "Country": "United States", "Year": 2030, "Date": "2030-01-01", "Population": 355000000.0, "Per_capita_GNI": null, "GDP": 30000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": null, "IMF_exchange_rate": null}]}
+  check: the record read back has the id POST returned (6ae4bc33420fa07d48809428)  PASS
   check: GDP is the value sent  PASS
 
 [MongoDB 3] Update GDP and add exchange rates (the record has none yet)
-  PUT /api/mongodb/records/6ae4b4b07c150f826f6ce5cc
+  PUT /api/mongodb/records/6ae4bc33420fa07d48809428
   body: {"gdp": 31000000000000, "ama_exchange_rate": 1.0, "imf_exchange_rate": 1.0}
   -> 200 (expected 200)  PASS
-  {"message": "Record updated", "id": "6ae4b4b07c150f826f6ce5cc", "modified": 1}
+  {"message": "Record updated", "id": "6ae4bc33420fa07d48809428", "modified": 1}
   check: the response says 1 record was modified  PASS
 
 [MongoDB 4] Read it again
   GET /api/mongodb/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
   -> 200 (expected 200)  PASS
-  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"id": "6ae4b4b07c150f826f6ce5cc", "Country": "United States", "Year": 2030, "Date": "2030-01-01", "Population": 355000000.0, "Per_capita_GNI": null, "GDP": 31000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0}]}
+  {"country": "United States", "start_date": "2030-01-01", "end_date": "2030-12-31", "count": 1, "data": [{"id": "6ae4bc33420fa07d48809428", "Country": "United States", "Year": 2030, "Date": "2030-01-01", "Population": 355000000.0, "Per_capita_GNI": null, "GDP": 31000000000000.0, "GNI_USD": null, "Exports": null, "Imports": null, "Final_consumption_expenditure": 24000000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0}]}
   check: GDP has the new value  PASS
   check: the exchange rates were saved  PASS
 
 [MongoDB 5] Send the same update again (changes nothing, the record still exists)
-  PUT /api/mongodb/records/6ae4b4b07c150f826f6ce5cc
+  PUT /api/mongodb/records/6ae4bc33420fa07d48809428
   body: {"gdp": 31000000000000, "ama_exchange_rate": 1.0, "imf_exchange_rate": 1.0}
   -> 200 (expected 200)  PASS
-  {"message": "No changes: the record already has these values", "id": "6ae4b4b07c150f826f6ce5cc", "modified": 0}
+  {"message": "No changes: the record already has these values", "id": "6ae4bc33420fa07d48809428", "modified": 0}
   check: the response says 0 records were modified  PASS
 
 [MongoDB 6] Delete the record
-  DELETE /api/mongodb/records/6ae4b4b07c150f826f6ce5cc
+  DELETE /api/mongodb/records/6ae4bc33420fa07d48809428
   -> 200 (expected 200)  PASS
-  {"message": "Record deleted", "id": "6ae4b4b07c150f826f6ce5cc"}
+  {"message": "Record deleted", "id": "6ae4bc33420fa07d48809428"}
 
 [MongoDB 7] Read it again: the record is gone
   GET /api/mongodb/records/range?country=United States&start_date=2030-01-01&end_date=2030-12-31
@@ -136,8 +142,14 @@ MongoDB: POST -> GET -> PUT -> GET -> DELETE -> GET
   {"detail": "No records in the specified date range"}
 
 ======================================================================
-MongoDB: error cases
+MongoDB: annual date range and error cases
 ======================================================================
+[MongoDB A1] Range inside one year: records are annual, so that year's record is returned
+  GET /api/mongodb/records/range?country=United States&start_date=2015-12-30&end_date=2015-12-31
+  -> 200 (expected 200)  PASS
+  {"country": "United States", "start_date": "2015-12-30", "end_date": "2015-12-31", "count": 1, "data": [{"id": "6ae4b23b96da56830ae42987", "Country": "United States", "Year": 2015, "Date": "2015-01-01", "Population": 324607776, "Per_capita_GNI": 57488.0, "GDP": 18200000000000.0, "GNI_USD": 18700000000000.0, "Exports": 2270000000000.0, "Imports": 2790000000000.0, "Final_consumption_expenditure": 14900000000000.0, "AMA_exchange_rate": 1.0, "IMF_exchange_rate": 1.0}]}
+  check: one record, the whole year 2015 (dated 2015-01-01)  PASS
+
 [MongoDB E1] Update a record that does not exist
   PUT /api/mongodb/records/000000000000000000000000
   body: {"gdp": 1.0}
@@ -182,4 +194,4 @@ MongoDB: error cases
   -> 400 (expected 400)  PASS
   {"detail": "Invalid record ID format"}
 
-41 of 41 checks passed
+45 of 45 checks passed

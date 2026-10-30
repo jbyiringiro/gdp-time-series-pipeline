@@ -2,9 +2,10 @@
 Task 3 - CRUD demonstration for both databases
 
 Runs a complete POST -> GET -> PUT -> GET -> DELETE -> GET sequence against
-the running API, for MySQL and then MongoDB, followed by the error cases:
-an update that changes nothing, nonexistent IDs, invalid date ranges and a
-duplicate record. Each step prints the request, the HTTP status and the
+the running API, for MySQL and then MongoDB, followed by a date range inside
+one year (records are annual, so the whole year is returned) and the error
+cases: an update that changes nothing, nonexistent IDs, invalid date ranges
+and a duplicate record. Each step prints the request, the HTTP status and the
 response, and checks that the status (and the returned values) are the ones
 expected. Everything printed is also saved to report/crud_demo_output.txt.
 
@@ -141,9 +142,17 @@ def run_error_cases(api: str, db: str):
     name = "MySQL" if db == "sql" else "MongoDB"
     missing = MISSING_ID[db]
     log("=" * 70)
-    log(f"{name}: error cases")
+    log(f"{name}: annual date range and error cases")
     log("=" * 70)
 
+    def annual_checks(payload):
+        rows = payload["data"]
+        return [("one record, the whole year 2015 (dated 2015-01-01)",
+                 len(rows) == 1 and rows[0]["Year"] == 2015 and rows[0]["Date"] == "2015-01-01")]
+
+    step(f"[{name} A1] Range inside one year: records are annual, so that year's record is returned",
+         "GET", f"{records}/range", 200,
+         params={"country": COUNTRY, "start_date": "2015-12-30", "end_date": "2015-12-31"}, checks=annual_checks)
     step(f"[{name} E1] Update a record that does not exist", "PUT", f"{records}/{missing}", 404, body={"gdp": 1.0})
     step(f"[{name} E2] Update only the exchange rate of a record that does not exist",
          "PUT", f"{records}/{missing}", 404, body={"ama_exchange_rate": 1.0})

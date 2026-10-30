@@ -155,7 +155,12 @@ def _parse_date(value: str, name: str):
 
 
 def _years_in_range(start_date: str, end_date: str):
-    """Validate both dates first, then convert them into the years stored in the databases."""
+    """Validate both dates first, then convert them into the years stored in the databases.
+
+    The records are annual: each one covers a whole calendar year and is dated
+    1 January of that year. A year is returned when it overlaps the range, so
+    2015-12-30 to 2015-12-31 returns the 2015 record (dated 2015-01-01).
+    """
     start = _parse_date(start_date, "start_date")
     end = _parse_date(end_date, "end_date")
     if end < start:
@@ -361,7 +366,7 @@ def sql_get_range(
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
 ):
-    """Get records within a date range from MySQL."""
+    """Get records within a date range from MySQL. Records are annual: every year that overlaps the range is returned."""
     start_year, end_year = _years_in_range(start_date, end_date)
 
     conn = _get_mysql()
@@ -624,7 +629,7 @@ def mongo_get_range(
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
 ):
-    """Get records within a date range from MongoDB."""
+    """Get records within a date range from MongoDB. Records are annual: every year that overlaps the range is returned."""
     start_year, end_year = _years_in_range(start_date, end_date)
 
     collection = _get_mongo()
